@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pfa>
+  <persons>
+    <person id="1">
+      <firstName>John</firstName>
+      <lastName>Doe</lastName>
+      <dateOfBirth>1980-01-01</dateOfBirth>
+    </person>
+    <person id="2">
+      <firstName>Jane</firstName>
+      <lastName>Smith</lastName>
+      <dateOfBirth>1985-05-15</dateOfBirth>
+    </person>
+  </persons>
+  <entities>
+    <entity id="1">
+      <name>ACME Corp</name>
+      <description>A multinational corporation</description>
+    </entity>
+  </entities>
+  <associations>
+    <association>
+      <personId>1</personId>
+      <entityId>1</entityId>
+      <type>employee</type>
+      <startDate>2010-03-15</startDate>
+    </association>
+  </associations>
+</pfa>

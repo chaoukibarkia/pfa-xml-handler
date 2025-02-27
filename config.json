@@ -1,0 +1,17 @@
+{
+  "database": {
+      "connectionString": "postgresql://pfa_user:tt@S++2069@localhost:5432/pfa_db",
+      "maxConnections": 10,
+      "idleTimeout": 30000,
+      "connectionTimeout": 2000
+  },
+  "processing": {
+      "batchSize": 500,
+      "logLevel": "info",
+      "logDirectory": "./logs"
+  },
+  "xml": {
+      "validExtensions": [".xml"],
+      "maxFileSizeGB": 10
+  }
+}

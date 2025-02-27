@@ -1,0 +1,18 @@
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "pfa_example_db",
+    "user": "example_user",
+    "password": "example_password"
+  },
+  "logging": {
+    "level": "debug",
+    "filePath": "./logs/processing.log",
+    "errorPath": "./logs/error.log"
+  },
+  "options": {
+    "batchSize": 100,
+    "validateInput": true
+  }
+}
