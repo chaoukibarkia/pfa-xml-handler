@@ -9,7 +9,13 @@ const {
     EntityModel, 
     AssociationModel, 
     RelationshipModel, 
-    DescriptionTypeModel 
+    DescriptionTypeModel,
+    OccupationModel,
+    SanctionsReferenceModel,
+    DateTypeModel,
+    NameTypeModel,
+    RoleTypeModel,
+    InformationSourceModel
 } = require('../models/models-index');
 
 class XMLParserService {
@@ -56,6 +62,7 @@ class XMLParserService {
                 personBirthPlaces: 0,
                 personDocuments: 0,
                 personImages: 0,
+                personSources: 0,
                 entities: 0,
                 entityNames: 0,
                 entityDescriptions: 0,
@@ -63,6 +70,7 @@ class XMLParserService {
                 entityDates: 0,
                 entitySanctions: 0,
                 entityVessels: 0,
+                entitySources: 0,
                 associations: 0,
                 publicFigureAssociations: 0,
                 specialEntityAssociations: 0
@@ -84,7 +92,13 @@ class XMLParserService {
                 entity: new EntityModel(this.dbClient),
                 association: new AssociationModel(this.dbClient),
                 relationship: new RelationshipModel(this.dbClient),
-                descriptionType: new DescriptionTypeModel(this.dbClient)
+                descriptionType: new DescriptionTypeModel(this.dbClient),
+                occupation: new OccupationModel(this.dbClient),
+                sanctionsReference: new SanctionsReferenceModel(this.dbClient),
+                dateType: new DateTypeModel(this.dbClient),
+                nameType: new NameTypeModel(this.dbClient),
+                roleType: new RoleTypeModel(this.dbClient),
+                informationSource: new InformationSourceModel(this.dbClient)
             };
             
             logger.processInfo('Database connection established and models initialized');
@@ -211,16 +225,10 @@ class XMLParserService {
         // Occupation List
         xml.on('endElement: Occupation', async (occupation) => {
             try {
-                // Manually insert occupation since there's no model
-                await this.dbClient.query(`
-                    INSERT INTO occupations (code, name)
-                    VALUES ($1, $2)
-                    ON CONFLICT (code) DO UPDATE
-                    SET name = EXCLUDED.name
-                `, [
-                    parseInt(this.getAttribute(occupation.$, 'code'), 10),
-                    this.getAttribute(occupation.$, 'name')
-                ]);
+                await this.models.occupation.upsert({
+                    code: this.getAttribute(occupation.$, 'code'),
+                    name: this.getAttribute(occupation.$, 'name')
+                });
                 
                 this.state.counts.occupations++;
                 this.incrementProcessedRecords();
@@ -233,7 +241,7 @@ class XMLParserService {
         xml.on('endElement: Relationship', async (relationship) => {
             try {
                 await this.models.relationship.upsert({
-                    code: parseInt(this.getAttribute(relationship.$, 'code'), 10),
+                    code: this.getAttribute(relationship.$, 'code'),
                     name: this.getAttribute(relationship.$, 'name')
                 });
                 
@@ -247,21 +255,12 @@ class XMLParserService {
         // Sanctions References List
         xml.on('endElement: ReferenceName', async (reference) => {
             try {
-                // Manually insert sanctions reference since there's no model
-                await this.dbClient.query(`
-                    INSERT INTO sanctions_references (code, name, status, description2_id, description2_level)
-                    VALUES ($1, $2, $3, $4, 2)
-                    ON CONFLICT (code) DO UPDATE
-                    SET 
-                        name = EXCLUDED.name,
-                        status = EXCLUDED.status,
-                        description2_id = EXCLUDED.description2_id
-                `, [
-                    parseInt(this.getAttribute(reference.$, 'code'), 10),
-                    this.getAttribute(reference.$, 'name'),
-                    this.getAttribute(reference.$, 'status'),
-                    parseInt(this.getAttribute(reference.$, 'Description2Id'), 10) || null
-                ]);
+                await this.models.sanctionsReference.upsert({
+                    code: this.getAttribute(reference.$, 'code'),
+                    name: this.getAttribute(reference.$, 'name'),
+                    status: this.getAttribute(reference.$, 'status'),
+                    description2_id: this.getAttribute(reference.$, 'Description2Id')
+                });
                 
                 this.state.counts.sanctionsReferences++;
                 this.incrementProcessedRecords();
@@ -275,7 +274,7 @@ class XMLParserService {
             try {
                 await this.models.descriptionType.upsert({
                     level: 1,
-                    id: parseInt(this.getAttribute(description.$, 'Description1Id'), 10),
+                    id: this.getAttribute(description.$, 'Description1Id'),
                     description: description._,
                     parent_id: null,
                     parent_level: null,
@@ -294,9 +293,9 @@ class XMLParserService {
             try {
                 await this.models.descriptionType.upsert({
                     level: 2,
-                    id: parseInt(this.getAttribute(description.$, 'Description2Id'), 10),
+                    id: this.getAttribute(description.$, 'Description2Id'),
                     description: description._,
-                    parent_id: parseInt(this.getAttribute(description.$, 'Description1Id'), 10),
+                    parent_id: this.getAttribute(description.$, 'Description1Id'),
                     parent_level: 1,
                     record_type: null
                 });
@@ -313,9 +312,9 @@ class XMLParserService {
             try {
                 await this.models.descriptionType.upsert({
                     level: 3,
-                    id: parseInt(this.getAttribute(description.$, 'Description3Id'), 10),
+                    id: this.getAttribute(description.$, 'Description3Id'),
                     description: description._,
-                    parent_id: parseInt(this.getAttribute(description.$, 'Description2Id'), 10),
+                    parent_id: this.getAttribute(description.$, 'Description2Id'),
                     parent_level: 2,
                     record_type: null
                 });
@@ -330,17 +329,11 @@ class XMLParserService {
         // Date Type List
         xml.on('endElement: DateType', async (dateType) => {
             try {
-                // Manually insert date type
-                await this.dbClient.query(`
-                    INSERT INTO date_types (date_type_id, name, record_type)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (date_type_id, record_type) DO UPDATE
-                    SET name = EXCLUDED.name
-                `, [
-                    parseInt(this.getAttribute(dateType.$, 'Id'), 10),
-                    this.getAttribute(dateType.$, 'name'),
-                    this.getAttribute(dateType.$, 'RecordType')
-                ]);
+                await this.models.dateType.upsert({
+                    date_type_id: this.getAttribute(dateType.$, 'Id'),
+                    name: this.getAttribute(dateType.$, 'name'),
+                    record_type: this.getAttribute(dateType.$, 'RecordType')
+                });
                 
                 this.state.counts.dateTypes++;
                 this.incrementProcessedRecords();
@@ -352,17 +345,11 @@ class XMLParserService {
         // Name Type List
         xml.on('endElement: NameType', async (nameType) => {
             try {
-                // Manually insert name type
-                await this.dbClient.query(`
-                    INSERT INTO name_types (name_type_id, name, record_type)
-                    VALUES ($1, $2, $3)
-                    ON CONFLICT (name_type_id, record_type) DO UPDATE
-                    SET name = EXCLUDED.name
-                `, [
-                    parseInt(this.getAttribute(nameType.$, 'NameTypeID'), 10),
-                    nameType._,
-                    this.getAttribute(nameType.$, 'RecordType')
-                ]);
+                await this.models.nameType.upsert({
+                    name_type_id: this.getAttribute(nameType.$, 'NameTypeID'),
+                    name: nameType._,
+                    record_type: this.getAttribute(nameType.$, 'RecordType')
+                });
                 
                 this.state.counts.nameTypes++;
                 this.incrementProcessedRecords();
@@ -374,16 +361,10 @@ class XMLParserService {
         // Role Type List
         xml.on('endElement: RoleType', async (roleType) => {
             try {
-                // Manually insert role type
-                await this.dbClient.query(`
-                    INSERT INTO role_types (role_type_id, name)
-                    VALUES ($1, $2)
-                    ON CONFLICT (role_type_id) DO UPDATE
-                    SET name = EXCLUDED.name
-                `, [
-                    parseInt(this.getAttribute(roleType.$, 'Id'), 10),
-                    this.getAttribute(roleType.$, 'name')
-                ]);
+                await this.models.roleType.upsert({
+                    role_type_id: this.getAttribute(roleType.$, 'Id'),
+                    name: this.getAttribute(roleType.$, 'name')
+                });
                 
                 this.state.counts.roleTypes++;
                 this.incrementProcessedRecords();
@@ -556,6 +537,26 @@ class XMLParserService {
                     }
                 }
                 
+                // Process country details
+                if (person.CountryDetails?.[0]?.Country) {
+                    for (const country of person.CountryDetails[0].Country) {
+                        const countryType = this.getAttribute(country.$, 'CountryType');
+                        
+                        if (country.CountryValue && country.CountryValue.length > 0) {
+                            for (const countryValue of country.CountryValue) {
+                                // We don't have a direct table for person-country associations
+                                // This would typically be handled in a custom way depending on use case
+                                // For now, we could log it for manual handling
+                                logger.processInfo('Person country detail', {
+                                    personId,
+                                    countryType,
+                                    countryCode: this.getAttribute(countryValue.$, 'Code')
+                                });
+                            }
+                        }
+                    }
+                }
+                
                 // Process ID numbers/documents
                 if (person.IDNumberTypes?.[0]?.ID) {
                     for (const id of person.IDNumberTypes[0].ID) {
@@ -595,26 +596,13 @@ class XMLParserService {
                         const sourceName = this.getAttribute(source.$, 'name');
                         
                         // First, ensure the source exists
-                        const sourceResult = await this.dbClient.query(`
-                            INSERT INTO information_sources (name)
-                            VALUES ($1)
-                            ON CONFLICT (name) DO UPDATE
-                            SET name = EXCLUDED.name
-                            RETURNING id
-                        `, [sourceName]);
-                        
-                        const sourceId = sourceResult.rows[0].id;
+                        const sourceRecord = await this.models.informationSource.upsert({
+                            name: sourceName
+                        });
                         
                         // Then link it to the person
-                        await this.dbClient.query(`
-                            INSERT INTO person_sources 
-                            (person_id, source_id)
-                            VALUES ($1, $2)
-                            ON CONFLICT DO NOTHING
-                        `, [
-                            personId,
-                            sourceId
-                        ]);
+                        await this.models.informationSource.addPersonSource(personId, sourceRecord.id);
+                        this.state.counts.personSources++;
                     }
                 }
                 
@@ -742,6 +730,26 @@ class XMLParserService {
                     }
                 }
                 
+                // Process country details
+                if (entity.CountryDetails?.[0]?.Country) {
+                    for (const country of entity.CountryDetails[0].Country) {
+                        const countryType = this.getAttribute(country.$, 'CountryType');
+                        
+                        if (country.CountryValue && country.CountryValue.length > 0) {
+                            for (const countryValue of country.CountryValue) {
+                                // We don't have a direct table for entity-country associations
+                                // This would typically be handled in a custom way depending on use case
+                                // For now, we could log it for manual handling
+                                logger.processInfo('Entity country detail', {
+                                    entityId,
+                                    countryType,
+                                    countryCode: this.getAttribute(countryValue.$, 'Code')
+                                });
+                            }
+                        }
+                    }
+                }
+                
                 // Process vessel details
                 if (entity.VesselDetails) {
                     for (const vesselDetail of entity.VesselDetails) {
@@ -759,32 +767,39 @@ class XMLParserService {
                     }
                 }
                 
+                // Process ID numbers
+                if (entity.IDNumberTypes?.[0]?.ID) {
+                    for (const id of entity.IDNumberTypes[0].ID) {
+                        const idType = this.getAttribute(id.$, 'IDType');
+                        
+                        if (id.IDValue && id.IDValue.length > 0) {
+                            for (const idValue of id.IDValue) {
+                                // Note: There's no entity_documents table in the schema
+                                // We'll log this for now to track that we received this data
+                                logger.processInfo('Entity ID number received', {
+                                    entityId,
+                                    idType,
+                                    idValue: idValue._,
+                                    notes: this.getAttribute(idValue.$, 'IDnotes')
+                                });
+                            }
+                        }
+                    }
+                }
+                
                 // Process sources
                 if (entity.SourceDescription?.[0]?.Source) {
                     for (const source of entity.SourceDescription[0].Source) {
                         const sourceName = this.getAttribute(source.$, 'name');
                         
                         // First, ensure the source exists
-                        const sourceResult = await this.dbClient.query(`
-                            INSERT INTO information_sources (name)
-                            VALUES ($1)
-                            ON CONFLICT (name) DO UPDATE
-                            SET name = EXCLUDED.name
-                            RETURNING id
-                        `, [sourceName]);
-                        
-                        const sourceId = sourceResult.rows[0].id;
+                        const sourceRecord = await this.models.informationSource.upsert({
+                            name: sourceName
+                        });
                         
                         // Then link it to the entity
-                        await this.dbClient.query(`
-                            INSERT INTO entity_sources 
-                            (entity_id, source_id)
-                            VALUES ($1, $2)
-                            ON CONFLICT DO NOTHING
-                        `, [
-                            entityId,
-                            sourceId
-                        ]);
+                        await this.models.informationSource.addEntitySource(entityId, sourceRecord.id);
+                        this.state.counts.entitySources++;
                     }
                 }
                 
