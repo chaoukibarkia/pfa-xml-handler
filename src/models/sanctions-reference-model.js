@@ -1,4 +1,3 @@
-// src/models/sanctions-reference-model.js
 const BaseModel = require('./base-model');
 const logger = require('../utils/logging');
 
@@ -34,7 +33,7 @@ class SanctionsReferenceModel extends BaseModel {
     sanitize(record) {
         return {
             code: parseInt(record.code, 10),
-            name: record.name.trim(),
+            name: record.name?.trim() || '',
             status: record.status?.trim() || null,
             description2_id: record.description2_id ? parseInt(record.description2_id, 10) : null,
             description2_level: record.description2_level || 2
@@ -42,15 +41,58 @@ class SanctionsReferenceModel extends BaseModel {
     }
 
     /**
-     * Insert or update sanctions reference
+     * Check if description exists before trying to reference it
+     * @param {number} level - Description level
+     * @param {number} id - Description ID
+     * @returns {Promise<boolean>} Whether the description exists
+     */
+    async descriptionExists(level, id) {
+        if (!level || !id) return false;
+        
+        try {
+            const query = `
+                SELECT 1 FROM description_types 
+                WHERE level = $1 AND id = $2
+            `;
+            
+            const result = await this.db.query(query, [level, id]);
+            return result.rows.length > 0;
+        } catch (error) {
+            logger.processingError('Description existence check failed', error);
+            return false;
+        }
+    }
+
+    /**
+     * Insert or update sanctions reference with foreign key validation
      * @param {Object} record - Sanctions reference record
-     * @returns {Promise<Object>} Inserted or updated sanctions reference
+     * @returns {Promise<Object|null>} Inserted or updated sanctions reference, or null if validation failed
      */
     async upsert(record) {
         try {
             // Validate and sanitize
             this.validate(record);
             const sanitizedRecord = this.sanitize(record);
+
+            // Check if the description reference exists
+            if (sanitizedRecord.description2_id) {
+                const exists = await this.descriptionExists(
+                    sanitizedRecord.description2_level, 
+                    sanitizedRecord.description2_id
+                );
+                
+                if (!exists) {
+                    logger.processInfo('Missing description reference', {
+                        code: sanitizedRecord.code,
+                        description2_level: sanitizedRecord.description2_level,
+                        description2_id: sanitizedRecord.description2_id
+                    });
+                    
+                    // Set to NULL to avoid foreign key constraint violation
+                    sanitizedRecord.description2_level = null;
+                    sanitizedRecord.description2_id = null;
+                }
+            }
 
             const query = `
                 INSERT INTO ${this.tableName} 
@@ -142,7 +184,7 @@ class SanctionsReferenceModel extends BaseModel {
     }
     
     /**
-     * Batch upsert sanctions references
+     * Batch upsert sanctions references with improved error handling
      * @param {Array} references - Array of sanctions reference records
      * @returns {Promise<number>} Number of upserted sanctions references
      */
@@ -153,15 +195,34 @@ class SanctionsReferenceModel extends BaseModel {
             await this.db.query('BEGIN');
 
             let upsertedCount = 0;
+            let errorCount = 0;
+            const maxErrors = 10; // Only log up to 10 errors to avoid log flooding
+            
             for (const reference of references) {
-                await this.upsert(reference);
-                upsertedCount++;
+                try {
+                    await this.upsert(reference);
+                    upsertedCount++;
+                } catch (error) {
+                    errorCount++;
+                    
+                    // Only log first few errors to avoid overwhelming logs
+                    if (errorCount <= maxErrors) {
+                        logger.processingError(`Sanctions reference error ${errorCount}`, error);
+                    } else if (errorCount === maxErrors + 1) {
+                        logger.processingError(`Too many sanctions reference errors, suppressing further logs`, {
+                            totalReferences: references.length,
+                            errorsSoFar: errorCount
+                        });
+                    }
+                }
             }
 
             await this.db.query('COMMIT');
 
-            logger.processInfo('Batch sanctions references upserted', {
-                totalReferences: upsertedCount
+            logger.processInfo('Batch sanctions references completed', {
+                totalReferences: references.length,
+                successCount: upsertedCount,
+                errorCount: errorCount
             });
 
             return upsertedCount;
