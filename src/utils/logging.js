@@ -1,3 +1,4 @@
+// src/utils/logging.js
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
@@ -53,6 +54,18 @@ logger.processingError = (message, error) => {
         error: error.message,
         stack: error.stack,
         context: 'processing'
+    });
+};
+
+// Add a method for memory usage tracking
+logger.logMemoryUsage = () => {
+    const memoryUsage = process.memoryUsage();
+    logger.info('Memory usage', {
+        rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+        heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+        heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
+        external: `${Math.round(memoryUsage.external / 1024 / 1024)} MB`,
+        context: 'memory'
     });
 };
 
