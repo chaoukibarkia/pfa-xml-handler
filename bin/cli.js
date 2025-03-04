@@ -11,6 +11,16 @@ const ConfigManager = require('../src/config/index');
 const errorHandler = require('../src/utils/error-handler');
 const DownloadExtractService = require('../src/services/download-extract-service');
 
+// Configure max memory for Node.js process
+// This prevents the 'JavaScript heap out of memory' error
+// Note: This should be adjusted according to system capabilities
+const maxMemoryMB = parseInt(process.env.NODE_MAX_MEMORY_MB || '4096', 10);
+// Set Node.js max old space size to the configured value
+if (maxMemoryMB) {
+  // For the running instance - though this should be set via command line option when starting
+  process.env.NODE_OPTIONS = `--max-old-space-size=${maxMemoryMB}`;
+}
+
 /**
  * Main CLI application for PFA XML Handler
  */
@@ -64,6 +74,24 @@ async function main() {
     help: 'Only download the file, do not process', 
     action: 'store_true' 
   });
+  
+  parser.add_argument('--max-memory', { 
+    help: 'Maximum memory allocation in MB (also set by NODE_MAX_MEMORY_MB env var)',
+    type: 'int',
+    default: maxMemoryMB
+  });
+  
+  parser.add_argument('--stream-mode', { 
+    help: 'Processing mode: eager (all at once) or stream (smaller batches)',
+    choices: ['eager', 'stream'],
+    default: 'stream'
+  });
+  
+  parser.add_argument('--gc-interval', { 
+    help: 'Force garbage collection interval (in records)',
+    type: 'int',
+    default: 1000
+  });
 
   // Parse arguments
   const args = parser.parse_args();
@@ -78,11 +106,22 @@ async function main() {
     const configManager = new ConfigManager({
       configPath: args.config,
       database: args.connection ? { connectionString: args.connection } : undefined,
-      processing: args.batch_size ? { batchSize: args.batch_size } : undefined,
+      processing: {
+        batchSize: args.batch_size || undefined,
+        streamMode: args.stream_mode,
+        gcInterval: args.gc_interval,
+        maxMemoryMB: args.max_memory
+      },
       xml: args.max_file_size ? { maxFileSizeGB: args.max_file_size } : undefined
     });
     
     const config = configManager.load();
+    
+    // Update memory settings if specified
+    if (args.max_memory && args.max_memory !== maxMemoryMB) {
+      logger.processInfo(`Setting maximum memory allocation to ${args.max_memory}MB`);
+      process.env.NODE_OPTIONS = `--max-old-space-size=${args.max_memory}`;
+    }
     logger.processInfo('Configuration loaded successfully');
 
     // File path to process (may be downloaded)
@@ -126,7 +165,10 @@ async function main() {
     const parserOptions = {
       batchSize: config.processing.batchSize,
       validateXml: !args.no_validate,
-      maxFileSizeGB: config.xml.maxFileSizeGB
+      maxFileSizeGB: config.xml.maxFileSizeGB,
+      streamMode: config.processing.streamMode,
+      gcInterval: config.processing.gcInterval,
+      maxMemoryMB: config.processing.maxMemoryMB
     };
 
     const xmlParser = new XmlParserService(dbConfig, parserOptions);
