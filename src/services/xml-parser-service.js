@@ -282,7 +282,8 @@ class XMLParserService extends EventEmitter {
                 const stream = fs.createReadStream(filePath, streamOptions);
                 
                 // Create XML parser with optimized options
-                const xml = new XmlStream(stream, {
+                // FIX: Do not pass any object for encoding, use a simple string
+                const xml = new XmlStream(stream, 'utf8', {
                     trim: true,
                     // Additional options for memory optimization
                     captureText: true,        // Only capture text when needed
