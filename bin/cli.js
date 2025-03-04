@@ -3,164 +3,182 @@
 const fs = require('fs');
 const path = require('path');
 const { ArgumentParser } = require('argparse');
-const XMLParserService = require('../src/services/xml-parser-service');
+const { Pool } = require('pg');
+const XmlParserService = require('../src/services/xml-parser-service');
 const logger = require('../src/utils/logging');
 const FileValidator = require('../src/utils/file-validator');
+const ConfigManager = require('../src/config/index');
+const errorHandler = require('../src/utils/error-handler');
+const DownloadExtractService = require('../src/services/download-extract-service');
 
-// Load configuration
-let config;
-try {
-  const configPath = path.resolve(process.cwd(), 'config.json');
-  if (fs.existsSync(configPath)) {
-    config = require(configPath);
-    logger.processInfo('Loaded configuration from config.json');
-  } else {
-    logger.processInfo('No config.json found, using default configuration');
-    config = {
-      database: {
-        connectionString: "postgresql://postgres:postgres@localhost:5432/pfa_db",
-        maxConnections: 10,
-        idleTimeout: 30000,
-        connectionTimeout: 2000
-      },
-      processing: {
-        batchSize: 500,
-        logLevel: "info",
-        logDirectory: "./logs"
-      },
-      xml: {
-        validExtensions: [".xml"],
-        maxFileSizeGB: 10
-      }
-    };
-  }
-} catch (error) {
-  logger.processingError('Failed to load configuration', error);
-  process.exit(1);
-}
+/**
+ * Main CLI application for PFA XML Handler
+ */
+async function main() {
+  // Setup argument parser
+  const parser = new ArgumentParser({
+    description: 'PFA XML Handler - Process large XML files into PostgreSQL database'
+  });
 
-// Setup argument parser
-const parser = new ArgumentParser({
-  description: 'PFA XML Handler - Process large XML files into PostgreSQL database'
-});
+  parser.add_argument('-f', '--file', { 
+    help: 'Path to input XML file', 
+    required: false 
+  });
 
-parser.add_argument('-f', '--file', { 
-  help: 'Path to input XML file', 
-  required: true 
-});
+  parser.add_argument('-u', '--url', { 
+    help: 'URL to download XML file from', 
+    required: false 
+  });
 
-parser.add_argument('-c', '--connection', { 
-  help: 'Database connection string', 
-  default: config.database.connectionString 
-});
+  parser.add_argument('-c', '--connection', { 
+    help: 'Database connection string' 
+  });
 
-parser.add_argument('-b', '--batch-size', { 
-  help: 'Batch size for processing', 
-  type: 'int', 
-  default: config.processing.batchSize 
-});
+  parser.add_argument('-b', '--batch-size', { 
+    help: 'Batch size for processing', 
+    type: 'int'
+  });
 
-parser.add_argument('-m', '--max-file-size', { 
-  help: 'Maximum file size in GB', 
-  type: 'float', 
-  default: config.xml.maxFileSizeGB 
-});
+  parser.add_argument('-m', '--max-file-size', { 
+    help: 'Maximum file size in GB', 
+    type: 'float'
+  });
 
-parser.add_argument('--no-validate', { 
-  help: 'Skip XML validation', 
-  action: 'store_true' 
-});
+  parser.add_argument('--config', { 
+    help: 'Path to custom config file',
+    default: path.resolve(process.cwd(), 'config.json')
+  });
 
-// Parse arguments
-const args = parser.parse_args();
+  parser.add_argument('--type', { 
+    help: 'Type of file to process: full, delta, incremental',
+    choices: ['full', 'delta', 'incremental'],
+    default: 'full'
+  });
 
-// Setup database config
-const dbConfig = args.connection.startsWith('postgresql://') 
-  ? { connectionString: args.connection } 
-  : { 
-      connectionString: args.connection,
-      max: config.database.maxConnections,
-      idleTimeoutMillis: config.database.idleTimeout,
-      connectionTimeoutMillis: config.database.connectionTimeout
-    };
+  parser.add_argument('--no-validate', { 
+    help: 'Skip XML validation', 
+    action: 'store_true' 
+  });
 
-// Parse XML file
-async function processXmlFile() {
+  parser.add_argument('--download-only', { 
+    help: 'Only download the file, do not process', 
+    action: 'store_true' 
+  });
+
+  // Parse arguments
+  const args = parser.parse_args();
+
   try {
-    // Validate the file
-    logger.processInfo('Starting XML file validation');
-    const validatedFilePath = FileValidator.validate(args.file, {
-      xml: {
-        validExtensions: config.xml.validExtensions,
-        maxFileSizeGB: args.max_file_size
-      }
+    // Either a file path or a URL must be provided
+    if (!args.file && !args.url) {
+      throw new Error('Either a file path (-f, --file) or URL (-u, --url) must be provided');
+    }
+
+    // Load configuration with command line overrides
+    const configManager = new ConfigManager({
+      configPath: args.config,
+      database: args.connection ? { connectionString: args.connection } : undefined,
+      processing: args.batch_size ? { batchSize: args.batch_size } : undefined,
+      xml: args.max_file_size ? { maxFileSizeGB: args.max_file_size } : undefined
     });
     
-    // Create XML parser
-    logger.processInfo('Creating XML parser service');
-    const parserOptions = {
-      batchSize: args.batch_size,
-      validateXml: !args.no_validate,
-      maxFileSizeGB: args.max_file_size
-    };
-    
-    const xmlParser = new XMLParserService(dbConfig, parserOptions);
-    
-    // Start processing
+    const config = configManager.load();
+    logger.processInfo('Configuration loaded successfully');
+
+    // File path to process (may be downloaded)
+    let filePath = args.file;
+
+    // If URL is provided, download the file
+    if (args.url) {
+      logger.processInfo(`Downloading file from ${args.url}`);
+      const downloadService = new DownloadExtractService(config.storage);
+      
+      // Initialize download service
+      await downloadService.initialize();
+      
+      // Download and possibly extract the file
+      filePath = await downloadService.downloadAndExtract(args.url, true);
+      
+      logger.processInfo(`File downloaded successfully to ${filePath}`);
+      
+      // Exit if download-only flag is set
+      if (args.download_only) {
+        logger.processInfo('Download complete, exiting as --download-only was specified');
+        return;
+      }
+    }
+
+    // Validate the file
+    logger.processInfo('Validating file');
+    FileValidator.validate(filePath, config.xml);
+
+    // Create database connection pool
+    const dbConfig = configManager.getDatabaseConfig();
+    const pool = new Pool(dbConfig);
+
+    // Process the XML file
     logger.processInfo('Beginning XML file processing', {
-      filePath: validatedFilePath,
-      batchSize: args.batch_size,
+      filePath,
+      batchSize: config.processing.batchSize,
       validateXml: !args.no_validate
     });
-    
+
+    const parserOptions = {
+      batchSize: config.processing.batchSize,
+      validateXml: !args.no_validate,
+      maxFileSizeGB: config.xml.maxFileSizeGB
+    };
+
+    const xmlParser = new XmlParserService(dbConfig, parserOptions);
     const startTime = new Date();
-    const stats = await xmlParser.parseXMLFile(validatedFilePath);
+    const stats = await xmlParser.parseXMLFile(filePath);
     const endTime = new Date();
-    
+
     // Calculate processing time
     const processingSeconds = (endTime - startTime) / 1000;
     const minutes = Math.floor(processingSeconds / 60);
     const seconds = Math.floor(processingSeconds % 60);
-    
-    // Log results
-    logger.processInfo('XML processing completed successfully', {
-      filePath: validatedFilePath,
-      processingTime: `${minutes}m ${seconds}s`,
-      totalRecords: stats.processedRecords,
-      recordsPerSecond: (stats.processedRecords / processingSeconds).toFixed(2),
-      counts: stats.counts
-    });
-    
+
+    // Display results
     console.log('\n------------------------------------');
     console.log('XML PROCESSING COMPLETED SUCCESSFULLY');
     console.log('------------------------------------');
-    console.log(`File: ${path.basename(validatedFilePath)}`);
+    console.log(`File: ${path.basename(filePath)}`);
     console.log(`Processing time: ${minutes}m ${seconds}s`);
     console.log(`Total records processed: ${stats.processedRecords}`);
     console.log(`Speed: ${(stats.processedRecords / processingSeconds).toFixed(2)} records/second`);
     console.log('------------------------------------');
     console.log('Record counts:');
-    
+
     // Display counts in a readable format
     Object.entries(stats.counts).forEach(([key, value]) => {
       if (value > 0) {
-        console.log(`  ${key}: ${value}`);
+        console.log(`  ${key}: ${value.toLocaleString()}`);
       }
     });
-    
+
     console.log('------------------------------------');
     console.log('See logs for detailed information.');
+
+    // Close the pool
+    await pool.end();
     
   } catch (error) {
-    logger.processingError('XML processing failed', error);
+    // Handle errors
+    errorHandler.handleFatalError('CLI Error', error);
+    
     console.error('\n-----------------------');
     console.error('XML PROCESSING FAILED');
     console.error('-----------------------');
     console.error(`Error: ${error.message}`);
     console.error('See logs for detailed information.');
+    
     process.exit(1);
   }
 }
 
-// Run the processing
-processXmlFile();
+// Run the application
+main().catch(error => {
+  errorHandler.handleFatalError('Unhandled Promise Rejection', error);
+  process.exit(1);
+});
