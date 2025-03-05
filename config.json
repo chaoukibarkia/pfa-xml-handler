@@ -1,12 +1,16 @@
 {
   "database": {
-      "connectionString": "postgresql://pfa_user:tt@S++2069@localhost:5432/pfa_db",
+      "host": "localhost",
+      "port": 5432,
+      "database": "pfa_db",
+      "user": "pfa_user",
+      "password": "tt@S++2069",
       "maxConnections": 10,
       "idleTimeout": 30000,
       "connectionTimeout": 2000
   },
   "processing": {
-      "batchSize": 500,
+      "batchSize": 100,
       "logLevel": "info",
       "logDirectory": "./logs"
   },

@@ -3,8 +3,8 @@
     "host": "localhost",
     "port": 5432,
     "database": "pfa_example_db",
-    "user": "example_user",
-    "password": "example_password"
+    "user": "pfa_user",
+    "password": "tt@S++2069"
   },
   "logging": {
     "level": "debug",

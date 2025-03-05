@@ -164,8 +164,6 @@ class BaseProcessor {
  * @returns {string} Text content
  */
     extractTextContent(node) {
-        console.log('Extracting text from:', typeof node, node);
-        
         if (!node) return '';
         
         // If node is a simple string, return it
@@ -176,30 +174,30 @@ class BaseProcessor {
             return node.map(item => this.extractTextContent(item)).join(' ').trim();
         }
         
-        // If node has a text property, use that
+        // If node has text content in a direct property
+        if (node._) return node._.trim();
         if (node.text) return node.text.trim();
+        if (node.$text) return node.$text.trim();
+        if (node.value) return String(node.value).trim();
         
-        // If node has a $ property (typical for xml-stream) and a text property
+        // For XML-Stream specific structures
         if (node.$ && node.$text) return node.$text.trim();
         
-        // If node has a _ property (typical for xml-stream)
-        if (node._) return node._.trim();
-        
-        // Check for specific object structure that might contain text
+        // For object inspection
         if (typeof node === 'object') {
-            // Check if it has a value property
-            if (node.value !== undefined) return String(node.value).trim();
-            
-            // Look for any property that might contain the text
-            for (const key of ['textContent', 'innerText', 'content', 'value', 'data']) {
-                if (node[key] !== undefined) return String(node[key]).trim();
+            // Try to find a property that might contain the text
+            for (const key of Object.keys(node)) {
+                // Skip $ attribute or empty values
+                if (key === '$' || !node[key]) continue;
+                
+                // If we find a string property, it might be the text
+                if (typeof node[key] === 'string') {
+                    return node[key].trim();
+                }
             }
-            
-            // If it's an XML object with '__text' property (some XML parsers use this)
-            if (node.__text !== undefined) return node.__text.trim();
         }
         
-        // Last resort: convert to string and check if it's not the default [object Object]
+        // As a last resort, try toString() but check for "[object Object]"
         const str = String(node);
         return str !== '[object Object]' ? str.trim() : '';
     }

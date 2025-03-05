@@ -205,110 +205,104 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description1Name XML element
      */
     async processDescription1(description) {
-        let descriptionText = '';
+        try {
+            // Improved text extraction logic
+            let descriptionText = '';
 
-        // Debug the structure
-        console.log('Description1 structure:', JSON.stringify(description, null, 2));
-
-        // Try different approaches to extract the text content
-        if (typeof description === 'object') {
-            // If it has a $ attribute and direct text content
-            if (description.$ && description._) {
+            if (typeof description === 'string') {
+                descriptionText = description;
+            } else if (description._) {
                 descriptionText = description._;
-            }
-            // If it's just the text content without attributes
-            else if (description._) {
-                descriptionText = description._;
-            }
-            // If it has a text property
-            else if (description.text) {
+            } else if (description.text) {
                 descriptionText = description.text;
-            }
-            // If it has a value property
-            else if (description.value) {
-                descriptionText = description.value;
-            }
-            // If there's a $text property (some XML parsers use this)
-            else if (description.$text) {
+            } else if (description.$text) {
                 descriptionText = description.$text;
-            }
-            // Last resort - check if toString() returns something useful
-            else {
-                const str = description.toString();
-                descriptionText = str !== '[object Object]' ? str : '';
-            }
-        }
-        // If it's already a string
-        else if (typeof description === 'string') {
-            descriptionText = description;
-        }
+            } else {
+                // Debug output to investigate structure
+                logger.processInfo('Description structure:', {
+                    type: typeof description,
+                    keys: description ? Object.keys(description) : [],
+                    structure: JSON.stringify(description)
+                });
 
-        console.log('Extracted description text:', descriptionText);
-        await this.models.descriptionType.upsert({
-            level: 1,
-            id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
-            description: descriptionText.trim(),
-            parent_id: null,
-            parent_level: null,
-            record_type: this.getAttribute(description.$, 'RecordType')
-        });
+                // Try a more comprehensive approach
+                descriptionText = this.extractTextContent(description);
 
-        this.stats.counts.descriptionTypes++;
+                // Last resort: skip this record
+                if (!descriptionText || descriptionText === '[object Object]') {
+                    logger.processingError('Failed to extract description text', {
+                        id: this.getAttribute(description.$, 'Description1Id')
+                    });
+                    return; // Skip this record rather than saving "[object Object]"
+                }
+            }
+
+            await this.models.descriptionType.upsert({
+                level: 1,
+                id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
+                description: descriptionText.trim(),
+                parent_id: null,
+                record_type: this.getAttribute(description.$, 'RecordType')
+            });
+
+            this.stats.counts.descriptionTypes++;
+        } catch (error) {
+            logger.processingError('Description1 processing error', error);
+            throw error;
+        }
     }
 
     /**
-     * Process Description Level 2
-     * @param {Object} description - Description2Name XML element
-     */
+  * Process Description Level 2
+  * @param {Object} description - Description2Name XML element
+  */
     async processDescription2(description) {
+        try {
+            // Improved text extraction logic
+            let descriptionText = '';
 
-        let descriptionText = '';
-        // Debug the structure
-        console.log('Description2 structure:', JSON.stringify(description, null, 2));
-
-        // Try different approaches to extract the text content
-        if (typeof description === 'object') {
-            // If it has a $ attribute and direct text content
-            if (description.$ && description._) {
+            if (typeof description === 'string') {
+                descriptionText = description;
+            } else if (description._) {
                 descriptionText = description._;
-            }
-            // If it's just the text content without attributes
-            else if (description._) {
-                descriptionText = description._;
-            }
-            // If it has a text property
-            else if (description.text) {
+            } else if (description.text) {
                 descriptionText = description.text;
-            }
-            // If it has a value property
-            else if (description.value) {
-                descriptionText = description.value;
-            }
-            // If there's a $text property (some XML parsers use this)
-            else if (description.$text) {
+            } else if (description.$text) {
                 descriptionText = description.$text;
-            }
-            // Last resort - check if toString() returns something useful
-            else {
-                const str = description.toString();
-                descriptionText = str !== '[object Object]' ? str : '';
-            }
-        }
-        // If it's already a string
-        else if (typeof description === 'string') {
-            descriptionText = description;
-        }
+            } else {
+                // Debug output to investigate structure
+                logger.processInfo('Description2 structure:', {
+                    type: typeof description,
+                    keys: description ? Object.keys(description) : [],
+                    structure: JSON.stringify(description)
+                });
 
-        await this.models.descriptionType.upsert({
-            level: 2,
-            id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
-            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
-            parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
-            parent_level: 1,
-            record_type: null
-        });
+                // Try a more comprehensive approach
+                descriptionText = this.extractTextContent(description);
 
-        this.stats.counts.descriptionTypes++;
+                // Last resort: skip this record
+                if (!descriptionText || descriptionText === '[object Object]') {
+                    logger.processingError('Failed to extract description2 text', {
+                        id: this.getAttribute(description.$, 'Description2Id')
+                    });
+                    return; // Skip this record rather than saving "[object Object]"
+                }
+            }
+
+            await this.models.descriptionType.upsert({
+                level: 2,
+                id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
+                description: descriptionText.trim(),
+                parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
+                parent_level: 1,
+                record_type: null
+            });
+
+            this.stats.counts.descriptionTypes++;
+        } catch (error) {
+            logger.processingError('Description2 processing error', error);
+            throw error;
+        }
     }
 
     /**
@@ -316,54 +310,52 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description3Name XML element
      */
     async processDescription3(description) {
+        try {
+            // Improved text extraction logic
+            let descriptionText = '';
 
-        let descriptionText = '';
-        // Debug the structure
-        console.log('Description3 structure:', JSON.stringify(description, null, 2));
-
-        // Try different approaches to extract the text content
-        if (typeof description === 'object') {
-            // If it has a $ attribute and direct text content
-            if (description.$ && description._) {
+            if (typeof description === 'string') {
+                descriptionText = description;
+            } else if (description._) {
                 descriptionText = description._;
-            }
-            // If it's just the text content without attributes
-            else if (description._) {
-                descriptionText = description._;
-            }
-            // If it has a text property
-            else if (description.text) {
+            } else if (description.text) {
                 descriptionText = description.text;
-            }
-            // If it has a value property
-            else if (description.value) {
-                descriptionText = description.value;
-            }
-            // If there's a $text property (some XML parsers use this)
-            else if (description.$text) {
+            } else if (description.$text) {
                 descriptionText = description.$text;
-            }
-            // Last resort - check if toString() returns something useful
-            else {
-                const str = description.toString();
-                descriptionText = str !== '[object Object]' ? str : '';
-            }
-        }
-        // If it's already a string
-        else if (typeof description === 'string') {
-            descriptionText = description;
-        }
+            } else {
+                // Debug output to investigate structure
+                logger.processInfo('Description3 structure:', {
+                    type: typeof description,
+                    keys: description ? Object.keys(description) : [],
+                    structure: JSON.stringify(description)
+                });
 
-        await this.models.descriptionType.upsert({
-            level: 3,
-            id: this.safeParseInt(this.getAttribute(description.$, 'Description3Id')),
-            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
-            parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
-            parent_level: 2,
-            record_type: null
-        });
+                // Try a more comprehensive approach
+                descriptionText = this.extractTextContent(description);
 
-        this.stats.counts.descriptionTypes++;
+                // Last resort: skip this record
+                if (!descriptionText || descriptionText === '[object Object]') {
+                    logger.processingError('Failed to extract description3 text', {
+                        id: this.getAttribute(description.$, 'Description3Id')
+                    });
+                    return; // Skip this record rather than saving "[object Object]"
+                }
+            }
+
+            await this.models.descriptionType.upsert({
+                level: 3,
+                id: this.safeParseInt(this.getAttribute(description.$, 'Description3Id')),
+                description: descriptionText.trim(),
+                parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
+                parent_level: 2,
+                record_type: null
+            });
+
+            this.stats.counts.descriptionTypes++;
+        } catch (error) {
+            logger.processingError('Description3 processing error', error);
+            throw error;
+        }
     }
     /**
      * Process Date Type
@@ -384,9 +376,28 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} nameType - NameType XML element
      */
     async processNameType(nameType) {
+        // Debug logging
+        logger.processInfo('Processing NameType', {
+            nameTypeId: this.getAttribute(nameType.$, 'NameTypeID'),
+            recordType: this.getAttribute(nameType.$, 'RecordType'),
+            nameTypeStructure: JSON.stringify(nameType)
+        });
+
+        const name = this.extractTextContent(nameType);
+
+        // Log the extracted name
+        logger.processInfo('Extracted name', { name });
+
+        if (!name) {
+            logger.processingError('Failed to extract name for NameType', {
+                nameTypeId: this.getAttribute(nameType.$, 'NameTypeID')
+            });
+            return; // Skip this record rather than causing an error
+        }
+
         await this.models.nameType.upsert({
             name_type_id: this.safeParseInt(this.getAttribute(nameType.$, 'NameTypeID')),
-            name: nameType._,
+            name: name,
             record_type: this.getAttribute(nameType.$, 'RecordType')
         });
 
