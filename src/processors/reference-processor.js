@@ -261,6 +261,8 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description2Name XML element
      */
     async processDescription2(description) {
+
+        let descriptionText = '';
         // Debug the structure
         console.log('Description2 structure:', JSON.stringify(description, null, 2));
 
@@ -314,6 +316,8 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description3Name XML element
      */
     async processDescription3(description) {
+
+        let descriptionText = '';
         // Debug the structure
         console.log('Description3 structure:', JSON.stringify(description, null, 2));
 
