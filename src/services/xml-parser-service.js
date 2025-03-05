@@ -41,7 +41,7 @@ class XMLParserService extends EventEmitter {
      */
     constructor(dbConfig, options = {}) {
         super();
-        
+
         // Initialize database connection
         this.pool = new Pool(dbConfig);
         this.dbClient = null;
@@ -76,7 +76,7 @@ class XMLParserService extends EventEmitter {
 
         // Processors
         this.processors = {};
-        
+
         // Memory management
         this.memoryCheckInterval = null;
         this.gcCounter = 0;
@@ -88,19 +88,19 @@ class XMLParserService extends EventEmitter {
      */
     tryForceGC() {
         this.gcCounter++;
-        
+
         if (global.gc && this.gcCounter >= this.config.gcInterval) {
             try {
                 const beforeMemory = process.memoryUsage();
                 global.gc();
                 const afterMemory = process.memoryUsage();
-                
+
                 logger.processInfo('Forced garbage collection', {
                     beforeHeapUsed: Math.round(beforeMemory.heapUsed / (1024 * 1024)) + ' MB',
                     afterHeapUsed: Math.round(afterMemory.heapUsed / (1024 * 1024)) + ' MB',
                     freed: Math.round((beforeMemory.heapUsed - afterMemory.heapUsed) / (1024 * 1024)) + ' MB'
                 });
-                
+
                 this.gcCounter = 0;
             } catch (error) {
                 logger.processingError('Failed to force garbage collection', error);
@@ -116,7 +116,7 @@ class XMLParserService extends EventEmitter {
         const heapUsedMB = Math.round(memoryUsage.heapUsed / (1024 * 1024));
         const rssUsedMB = Math.round(memoryUsage.rss / (1024 * 1024));
         const maxAllowedMB = this.config.maxMemoryMB * 0.9; // 90% of max memory
-        
+
         // Log if usage increased by more than 10%
         const lastHeapUsedMB = Math.round(this.state.lastMemoryUsage.heapUsed / (1024 * 1024));
         if (heapUsedMB > lastHeapUsedMB * 1.1) {
@@ -125,10 +125,10 @@ class XMLParserService extends EventEmitter {
                 rssUsedMB,
                 increase: `${((heapUsedMB / lastHeapUsedMB) * 100 - 100).toFixed(1)}%`
             });
-            
+
             this.state.lastMemoryUsage = memoryUsage;
         }
-        
+
         // Take action if memory usage exceeds threshold
         if (heapUsedMB > maxAllowedMB || rssUsedMB > maxAllowedMB) {
             logger.processInfo('Memory usage exceeded threshold', {
@@ -136,14 +136,14 @@ class XMLParserService extends EventEmitter {
                 rssUsedMB,
                 maxAllowedMB
             });
-            
+
             // Try to force garbage collection
             this.tryForceGC();
-            
+
             // If we're still above threshold after GC, emit warning
             const updatedMemory = process.memoryUsage();
             const updatedHeapUsedMB = Math.round(updatedMemory.heapUsed / (1024 * 1024));
-            
+
             if (updatedHeapUsedMB > maxAllowedMB) {
                 this.emit('memory-warning', {
                     heapUsedMB: updatedHeapUsedMB,
@@ -177,12 +177,12 @@ class XMLParserService extends EventEmitter {
             };
 
             // Initialize processors with optimized options for streaming
-            const processorOptions = { 
+            const processorOptions = {
                 batchSize: this.config.batchSize,
                 logInterval: this.config.logInterval,
                 streamMode: this.config.streamMode
             };
-            
+
             this.processors = {
                 reference: new ReferenceProcessor(this.dbClient, this.models, processorOptions),
                 person: new PersonProcessor(this.dbClient, this.models, processorOptions),
@@ -200,7 +200,7 @@ class XMLParserService extends EventEmitter {
                 gcInterval: this.config.gcInterval,
                 maxMemoryMB: this.config.maxMemoryMB
             });
-            
+
             return true;
         } catch (error) {
             logger.processingError('Failed to initialize database connection', error);
@@ -216,12 +216,12 @@ class XMLParserService extends EventEmitter {
             clearInterval(this.memoryCheckInterval);
             this.memoryCheckInterval = null;
         }
-        
+
         if (this.dbClient) {
             this.dbClient.release();
             logger.processInfo('Database connection released');
         }
-        
+
         // Clean up temporary files if enabled
         if (this.config.cleanupTemp) {
             try {
@@ -231,7 +231,7 @@ class XMLParserService extends EventEmitter {
                 logger.processingError('Failed to clean up temporary files', error);
             }
         }
-        
+
         // Try one final GC
         this.tryForceGC();
     }
@@ -278,18 +278,32 @@ class XMLParserService extends EventEmitter {
                     highWaterMark: 64 * 1024, // 64KB buffer size, adjust as needed
                     encoding: 'utf8'
                 };
-                
+
                 const stream = fs.createReadStream(filePath, streamOptions);
-                
+
                 // Create XML parser with optimized options
                 // FIX: Do not pass any object for encoding, use a simple string
+                // Create XML parser with optimized options
                 const xml = new XmlStream(stream, 'utf8', {
                     trim: true,
                     // Additional options for memory optimization
-                    captureText: true,        // Only capture text when needed
+                    captureText: true,        // Ensure text content is captured
                     preserveMarkup: false,    // Don't preserve XML markup
-                    strict: false             // Non-strict parsing for better performance
+                    strict: false,            // Non-strict parsing for better performance
+                    normalize: true,          // Normalize text nodes
+                    collect: false            // Don't collect children as arrays if not needed
                 });
+                // Configure the parser to capture text content
+                xml.preserve('Description1Name', true);
+                xml.preserve('Description2Name', true);
+                xml.preserve('Description3Name', true);
+                xml.preserve('NameType', true);
+                xml.preserve('DateType', true);
+                xml.preserve('RoleType', true);
+                xml.preserve('ReferenceName', true);
+                xml.preserve('Relationship', true);
+                xml.preserve('Occupation', true);
+                xml.preserve('CountryName', true);
 
                 // Initialize XML processors
                 this.processors.reference.setupHandlers(xml);
@@ -299,20 +313,20 @@ class XMLParserService extends EventEmitter {
 
                 // Stream checkpoint handling - memory optimization
                 let recordCounter = 0;
-                
+
                 // Add checkpoints for memory management
                 xml.on('endElement', (name) => {
                     // Count only major elements to reduce overhead
-                    if (['Person', 'Entity', 'PublicFigure', 'SpecialEntity', 'CountryName', 
-                         'Occupation', 'Relationship', 'ReferenceName', 'Description1Name',
-                         'Description2Name', 'Description3Name'].includes(name)) {
-                        
+                    if (['Person', 'Entity', 'PublicFigure', 'SpecialEntity', 'CountryName',
+                        'Occupation', 'Relationship', 'ReferenceName', 'Description1Name',
+                        'Description2Name', 'Description3Name'].includes(name)) {
+
                         recordCounter++;
-                        
+
                         // Check if we need to trigger garbage collection
                         if (recordCounter % this.config.gcInterval === 0) {
                             this.tryForceGC();
-                            
+
                             // Also trigger memory monitoring at these points
                             this.monitorMemory();
                         }
@@ -323,7 +337,7 @@ class XMLParserService extends EventEmitter {
                 xml.on('end', async () => {
                     try {
                         const processingTime = (Date.now() - this.state.startTime) / 1000;
-                        
+
                         // Consolidate counts from all processors
                         const counts = {};
                         for (const [name, processor] of Object.entries(this.processors)) {
@@ -370,11 +384,11 @@ class XMLParserService extends EventEmitter {
                 const memoryInterval = setInterval(() => {
                     logger.logMemoryUsage();
                 }, 60000); // Log memory usage every minute
-                
+
                 // Clear interval on stream end or error
                 xml.on('end', () => clearInterval(memoryInterval));
                 xml.on('error', () => clearInterval(memoryInterval));
-                
+
                 // Handle stream errors
                 stream.on('error', async (error) => {
                     logger.processingError('File stream error', error);

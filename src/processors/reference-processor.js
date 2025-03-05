@@ -8,7 +8,7 @@ const logger = require('../utils/logging');
 class ReferenceProcessor extends BaseProcessor {
     constructor(dbClient, models, options = {}) {
         super(dbClient, models, options);
-        
+
         // Reference-specific stats
         this.stats.counts = {
             countries: 0,
@@ -21,7 +21,7 @@ class ReferenceProcessor extends BaseProcessor {
             roleTypes: 0
         };
     }
-    
+
     /**
      * Setup XML handlers for reference data processing
      * @param {Object} xml - XML stream
@@ -37,7 +37,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Occupation references
         xml.on('endElement: Occupation', async (occupation) => {
             try {
@@ -48,7 +48,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Relationship references
         xml.on('endElement: Relationship', async (relationship) => {
             try {
@@ -59,7 +59,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Sanctions references
         xml.on('endElement: ReferenceName', async (reference) => {
             try {
@@ -70,7 +70,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Description types (Level 1)
         xml.on('endElement: Description1Name', async (description) => {
             try {
@@ -81,7 +81,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Description types (Level 2)
         xml.on('endElement: Description2Name', async (description) => {
             try {
@@ -92,7 +92,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Description types (Level 3)
         xml.on('endElement: Description3Name', async (description) => {
             try {
@@ -103,7 +103,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Date type references
         xml.on('endElement: DateType', async (dateType) => {
             try {
@@ -114,7 +114,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Name type references
         xml.on('endElement: NameType', async (nameType) => {
             try {
@@ -125,7 +125,7 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Role type references
         xml.on('endElement: RoleType', async (roleType) => {
             try {
@@ -136,11 +136,11 @@ class ReferenceProcessor extends BaseProcessor {
                 this.updateStats(false);
             }
         });
-        
+
         // Return the processor for chaining
         return this;
     }
-    
+
     /**
      * Process Country reference
      * @param {Object} country - CountryName XML element
@@ -152,10 +152,10 @@ class ReferenceProcessor extends BaseProcessor {
             is_territory: this.getAttribute(country.$, 'IsTerritory') === 'true',
             profile_url: this.getAttribute(country.$, 'ProfileURL')
         });
-        
+
         this.stats.counts.countries++;
     }
-    
+
     /**
      * Process Occupation reference
      * @param {Object} occupation - Occupation XML element
@@ -165,10 +165,10 @@ class ReferenceProcessor extends BaseProcessor {
             code: this.getAttribute(occupation.$, 'code'),
             name: this.getAttribute(occupation.$, 'name')
         });
-        
+
         this.stats.counts.occupations++;
     }
-    
+
     /**
      * Process Relationship reference
      * @param {Object} relationship - Relationship XML element
@@ -178,10 +178,10 @@ class ReferenceProcessor extends BaseProcessor {
             code: this.getAttribute(relationship.$, 'code'),
             name: this.getAttribute(relationship.$, 'name')
         });
-        
+
         this.stats.counts.relationships++;
     }
-    
+
     /**
      * Process Sanctions Reference
      * @param {Object} reference - ReferenceName XML element
@@ -193,10 +193,13 @@ class ReferenceProcessor extends BaseProcessor {
             status: this.getAttribute(reference.$, 'status'),
             description2_id: this.safeParseInt(this.getAttribute(reference.$, 'Description2Id'))
         });
-        
+
         this.stats.counts.sanctionsReferences++;
     }
-    
+
+    // src/processors/reference-processor.js
+    // Updated processDescription methods to correctly extract description text
+
     /**
      * Process Description Level 1
      * @param {Object} description - Description1Name XML element
@@ -205,15 +208,15 @@ class ReferenceProcessor extends BaseProcessor {
         await this.models.descriptionType.upsert({
             level: 1,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
-            description: description._,
+            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
             parent_id: null,
             parent_level: null,
             record_type: this.getAttribute(description.$, 'RecordType')
         });
-        
+
         this.stats.counts.descriptionTypes++;
     }
-    
+
     /**
      * Process Description Level 2
      * @param {Object} description - Description2Name XML element
@@ -222,15 +225,15 @@ class ReferenceProcessor extends BaseProcessor {
         await this.models.descriptionType.upsert({
             level: 2,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
-            description: description._,
+            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
             parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
             parent_level: 1,
             record_type: null
         });
-        
+
         this.stats.counts.descriptionTypes++;
     }
-    
+
     /**
      * Process Description Level 3
      * @param {Object} description - Description3Name XML element
@@ -239,15 +242,14 @@ class ReferenceProcessor extends BaseProcessor {
         await this.models.descriptionType.upsert({
             level: 3,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description3Id')),
-            description: description._,
+            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
             parent_id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
             parent_level: 2,
             record_type: null
         });
-        
+
         this.stats.counts.descriptionTypes++;
     }
-    
     /**
      * Process Date Type
      * @param {Object} dateType - DateType XML element
@@ -258,10 +260,10 @@ class ReferenceProcessor extends BaseProcessor {
             name: this.getAttribute(dateType.$, 'name'),
             record_type: this.getAttribute(dateType.$, 'RecordType')
         });
-        
+
         this.stats.counts.dateTypes++;
     }
-    
+
     /**
      * Process Name Type
      * @param {Object} nameType - NameType XML element
@@ -272,10 +274,10 @@ class ReferenceProcessor extends BaseProcessor {
             name: nameType._,
             record_type: this.getAttribute(nameType.$, 'RecordType')
         });
-        
+
         this.stats.counts.nameTypes++;
     }
-    
+
     /**
      * Process Role Type
      * @param {Object} roleType - RoleType XML element
@@ -285,7 +287,7 @@ class ReferenceProcessor extends BaseProcessor {
             role_type_id: this.safeParseInt(this.getAttribute(roleType.$, 'Id')),
             name: this.getAttribute(roleType.$, 'name')
         });
-        
+
         this.stats.counts.roleTypes++;
     }
 }
