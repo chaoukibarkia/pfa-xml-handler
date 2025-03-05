@@ -205,10 +205,49 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description1Name XML element
      */
     async processDescription1(description) {
+        let descriptionText = '';
+
+        // Debug the structure
+        console.log('Description1 structure:', JSON.stringify(description, null, 2));
+
+        // Try different approaches to extract the text content
+        if (typeof description === 'object') {
+            // If it has a $ attribute and direct text content
+            if (description.$ && description._) {
+                descriptionText = description._;
+            }
+            // If it's just the text content without attributes
+            else if (description._) {
+                descriptionText = description._;
+            }
+            // If it has a text property
+            else if (description.text) {
+                descriptionText = description.text;
+            }
+            // If it has a value property
+            else if (description.value) {
+                descriptionText = description.value;
+            }
+            // If there's a $text property (some XML parsers use this)
+            else if (description.$text) {
+                descriptionText = description.$text;
+            }
+            // Last resort - check if toString() returns something useful
+            else {
+                const str = description.toString();
+                descriptionText = str !== '[object Object]' ? str : '';
+            }
+        }
+        // If it's already a string
+        else if (typeof description === 'string') {
+            descriptionText = description;
+        }
+
+        console.log('Extracted description text:', descriptionText);
         await this.models.descriptionType.upsert({
             level: 1,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description1Id')),
-            description: description._ || description.toString().trim(),  // Fix: Extract text content properly
+            description: descriptionText.trim(),
             parent_id: null,
             parent_level: null,
             record_type: this.getAttribute(description.$, 'RecordType')
@@ -222,6 +261,42 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description2Name XML element
      */
     async processDescription2(description) {
+        // Debug the structure
+        console.log('Description2 structure:', JSON.stringify(description, null, 2));
+
+        // Try different approaches to extract the text content
+        if (typeof description === 'object') {
+            // If it has a $ attribute and direct text content
+            if (description.$ && description._) {
+                descriptionText = description._;
+            }
+            // If it's just the text content without attributes
+            else if (description._) {
+                descriptionText = description._;
+            }
+            // If it has a text property
+            else if (description.text) {
+                descriptionText = description.text;
+            }
+            // If it has a value property
+            else if (description.value) {
+                descriptionText = description.value;
+            }
+            // If there's a $text property (some XML parsers use this)
+            else if (description.$text) {
+                descriptionText = description.$text;
+            }
+            // Last resort - check if toString() returns something useful
+            else {
+                const str = description.toString();
+                descriptionText = str !== '[object Object]' ? str : '';
+            }
+        }
+        // If it's already a string
+        else if (typeof description === 'string') {
+            descriptionText = description;
+        }
+
         await this.models.descriptionType.upsert({
             level: 2,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description2Id')),
@@ -239,6 +314,42 @@ class ReferenceProcessor extends BaseProcessor {
      * @param {Object} description - Description3Name XML element
      */
     async processDescription3(description) {
+        // Debug the structure
+        console.log('Description3 structure:', JSON.stringify(description, null, 2));
+
+        // Try different approaches to extract the text content
+        if (typeof description === 'object') {
+            // If it has a $ attribute and direct text content
+            if (description.$ && description._) {
+                descriptionText = description._;
+            }
+            // If it's just the text content without attributes
+            else if (description._) {
+                descriptionText = description._;
+            }
+            // If it has a text property
+            else if (description.text) {
+                descriptionText = description.text;
+            }
+            // If it has a value property
+            else if (description.value) {
+                descriptionText = description.value;
+            }
+            // If there's a $text property (some XML parsers use this)
+            else if (description.$text) {
+                descriptionText = description.$text;
+            }
+            // Last resort - check if toString() returns something useful
+            else {
+                const str = description.toString();
+                descriptionText = str !== '[object Object]' ? str : '';
+            }
+        }
+        // If it's already a string
+        else if (typeof description === 'string') {
+            descriptionText = description;
+        }
+
         await this.models.descriptionType.upsert({
             level: 3,
             id: this.safeParseInt(this.getAttribute(description.$, 'Description3Id')),

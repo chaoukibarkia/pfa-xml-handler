@@ -313,7 +313,7 @@ class XMLParserService extends EventEmitter {
 
                 // Stream checkpoint handling - memory optimization
                 let recordCounter = 0;
-
+                
                 // Add checkpoints for memory management
                 xml.on('endElement', (name) => {
                     // Count only major elements to reduce overhead
