@@ -164,48 +164,44 @@ class BaseProcessor {
  * @returns {string} Text content
  */
     extractTextContent(node) {
+        console.log('Extracting text from:', typeof node, node);
+        
         if (!node) return '';
-
-        // Check for direct text content
+        
+        // If node is a simple string, return it
         if (typeof node === 'string') return node.trim();
-
-        // Check for the text content in the "_" property (xml-stream format)
-        if (node._ !== undefined && node._) return node._.trim();
-
-        // Check for text content in the "$text" property (some XML parsers)
-        if (node.$text !== undefined && node.$text) return node.$text.trim();
-
-        // If the node is directly an object with a text value
-        if (typeof node === 'object' && node.hasOwnProperty('$value')) {
-            return node.$value.trim();
+        
+        // If node is an array, join the array elements
+        if (Array.isArray(node)) {
+            return node.map(item => this.extractTextContent(item)).join(' ').trim();
         }
-
-        // Try to get text content through toString(), but only if it's likely to be useful
-        // (avoid default Object.prototype.toString result)
-        if (typeof node.toString === 'function') {
-            const text = node.toString();
-            if (text !== '[object Object]' && typeof text === 'string') {
-                return text.trim();
+        
+        // If node has a text property, use that
+        if (node.text) return node.text.trim();
+        
+        // If node has a $ property (typical for xml-stream) and a text property
+        if (node.$ && node.$text) return node.$text.trim();
+        
+        // If node has a _ property (typical for xml-stream)
+        if (node._) return node._.trim();
+        
+        // Check for specific object structure that might contain text
+        if (typeof node === 'object') {
+            // Check if it has a value property
+            if (node.value !== undefined) return String(node.value).trim();
+            
+            // Look for any property that might contain the text
+            for (const key of ['textContent', 'innerText', 'content', 'value', 'data']) {
+                if (node[key] !== undefined) return String(node[key]).trim();
             }
+            
+            // If it's an XML object with '__text' property (some XML parsers use this)
+            if (node.__text !== undefined) return node.__text.trim();
         }
-
-        // If we have a text node property with a specific value
-        if (node.textNode && typeof node.textNode === 'string') {
-            return node.textNode.trim();
-        }
-
-        // If we have children that might contain text
-        if (Array.isArray(node.children)) {
-            const textNodes = node.children.filter(child =>
-                typeof child === 'string' || child.nodeType === 3
-            );
-            if (textNodes.length > 0) {
-                return textNodes.map(t => typeof t === 'string' ? t : t.data).join('').trim();
-            }
-        }
-
-        // If nothing worked, return empty string
-        return '';
+        
+        // Last resort: convert to string and check if it's not the default [object Object]
+        const str = String(node);
+        return str !== '[object Object]' ? str.trim() : '';
     }
 }
 
